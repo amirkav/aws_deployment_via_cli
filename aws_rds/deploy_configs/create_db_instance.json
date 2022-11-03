@@ -1,0 +1,23 @@
+{
+    "DBClusterIdentifier": "rds-db-cluster-seneca-02",
+    "DBInstanceIdentifier": "rds-db-instance-seneca-02",
+    "DBInstanceClass": "db.r4.large",
+    "Engine": "aurora-mysql",
+    "DBSubnetGroupName": "atlas_dev_w2_subnetgroup",
+    "PreferredMaintenanceWindow": "sun:10:00-sun:10:30",
+    "DBParameterGroupName": "bbs-db-instance-paramgroup-01",
+    "AutoMinorVersionUpgrade": true,
+    "AvailabilityZone": "us-west-2a",
+    "OptionGroupName": "default:aurora-mysql-5-7",
+    "PubliclyAccessible": true,
+    "Tags": [
+        {
+            "Key": "OwnerEmail",
+            "Value": "devops@altitudenetworks.com"
+        }
+    ],
+    "CopyTagsToSnapshot": true,
+    "MonitoringInterval": 60,
+    "MonitoringRoleArn": "arn:aws:iam::474602133305:role/rds-monitoring-role",
+    "PromotionTier": 1
+}

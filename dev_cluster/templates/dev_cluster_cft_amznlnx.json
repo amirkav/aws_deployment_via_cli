@@ -1,0 +1,179 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Spin up a dev cluster to SSH into and test out code in dev mode. Resources: an EC2 instance.",
+
+  "Parameters": {
+
+    "BaseName": {
+      "Description": "Base Name of the CloudFormation stack to be provisioned. We will add Suffix to this name to indicate app name and version.",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "20",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+
+    "Suffix": {
+      "Description": "Suffix for names of stack resources. Should include a unique identifier such as app name or unique ID of the point of contact, and an incremental value to show version and iteration step.",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "15",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+
+    "ProjectName": {
+      "Description": "Name of the customer or project. We will use this value to reference other project-specific parameters in config files.",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "20",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "Should match a customer project name in config.json file. Can contain only ASCII characters. Min Length 2, Max Length 15"
+    },
+
+    "Env": {
+      "Description": "Environment name",
+      "Type": "String",
+      "AllowedValues": ["dev"],
+      "ConstraintDescription": "must be a valid environment name"
+    },
+
+    "SubnetId": {
+      "Description": "A list of  Subnet IDs for the instance.",
+      "Type": "AWS::EC2::Subnet::Id",
+      "ConstraintDescription": "They all should be valid Subnet IDs in the VPC that you want to deploy the instance in."
+    },
+
+    "SecurityGroupIds": {
+      "Description": "A list of Security Group IDs for the instance.",
+      "Type": "List<AWS::EC2::SecurityGroup::Id>",
+      "ConstraintDescription": "They all should be valid Security Group IDs, in the VPC that we are deploying the instance in."
+    },
+
+    "AmiId": {
+      "Description": "The ID of the Amazon Machine Image (AMI) to use to deploy the instance.",
+      "Type": "String",
+      "ConstraintDescription": "It should be a valid AMI ID"
+    },
+
+    "SnsTopicName" : {
+      "Description" : "The ARN of the SNS Topic for dev Cluster.",
+      "Type" : "String",
+      "ConstraintDescription": "Must be a valid SNS Topic name."
+    },
+
+    "OwnerContact": {
+      "Description": "Developer email",
+      "Type": "String",
+      "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
+      "ConstraintDescription": "Must be a valid email address."
+    }
+
+  },
+
+
+  "Mappings": {
+    "dev": {
+      "us-west-2": {
+        "KeyPair" : "BBS_KP",
+        "InstanceType" : "t2.micro",
+        "IAMRole" : "BBS-Dev-ECS-Member-Role",
+        "GitBranch" : "develop"
+      }
+    }
+  },
+
+  "Resources": {
+
+    "EC2Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata": {
+        "AWS::CloudFormation::Authentication": {
+          "S3AccessCreds": {
+            "type": "S3",
+            "roleName": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]}
+          }
+        }
+      },
+      "Properties": {
+        "BlockDeviceMappings": [{"DeviceName": "/dev/xvda", "Ebs": {"VolumeSize": "20"}}],
+        "IamInstanceProfile": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]},
+        "ImageId": {"Ref": "AmiId"},
+        "InstanceType": {"Fn::FindInMap": [{ "Ref": "Env"}, {"Ref": "AWS::Region"}, "InstanceType"]},
+        "KeyName": {"Fn::FindInMap": [{ "Ref": "Env"}, {"Ref": "AWS::Region"}, "KeyPair"]},
+        "Monitoring": "false",
+        "SecurityGroupIds": {"Ref":"SecurityGroupIds"},
+        "SubnetId": {"Ref":"SubnetId"},
+        "Tags" : [
+          {"Key":"Name", "Value" : {"Fn::Join": ["-",[ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"Suffix"}, "Instance"]] } },
+          {"Key":"OwnerContact", "Value" : { "Ref": "OwnerContact" } },
+          {"Key":"App Name", "Value" : { "Fn::Join":[ "-", [ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"Suffix"} ] ] } }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": ["",
+              [
+                "#!/usr/bin/env bash", "\n",
+                "exec > >(tee /var/log/user-data.log) 2>&1", "\n",
+                "set -o errexit -o nounset -o xtrace", "\n",
+
+                "#=========== Set env vars ===========", "\n",
+                "sudo /bin/echo 'export VENV_DIR=/opt/venv' >> /etc/environment", "\n",
+                "sudo /bin/echo 'export DATA_DIR=/opt/data' >> /etc/environment", "\n",
+                "sudo /bin/echo 'export GITS_DIR=/opt/gits' >> /etc/environment", "\n",
+                "sudo /bin/echo 'export CONF_DIR=/opt/.credentials' >> /etc/environment", "\n",
+                "sudo /bin/echo 'export PROJECT_NAME=", {"Ref":"ProjectName"},"' >> /etc/environment", "\n",
+                "sudo /bin/echo 'export ENV=", {"Ref":"Env"},"' >> /etc/environment", "\n",
+                "source /etc/environment", "\n",
+
+                "#=========== Install packages and dependencies ===========", "\n",
+                "sudo yum install -y jq git 2>&1", "\n",
+
+                "#=========== Download config files ===========", "\n",
+                "sudo rm -rf ${CONF_DIR}", "\n",
+                "sudo mkdir ${CONF_DIR}", "\n",
+                "sudo aws s3 cp s3://bbs-seneca-conf/config.json ${CONF_DIR}/config.json", "\n",
+                "# export CUSTOMER_NAME=$(cat ${CONF_DIR}/config.json | jq '.deployment.customer' --raw-output)", "\n",
+                "# export SERVICE_ACCOUNT_KEY=$(cat ${CONF_DIR}/config.json | jq \".${PROJECT_NAME}.service_account_json_file_name\" --raw-output)", "\n",
+                "# sudo aws s3 cp s3://bbs-seneca-conf/${SERVICE_ACCOUNT_KEY} ${CONF_DIR}/${SERVICE_ACCOUNT_KEY}", "\n",
+
+                "#=========== Clone Git Repos ===========", "\n",
+                "sudo aws s3 cp s3://bbs-seneca-conf/clone_git_repos.sh /tmp/clone_git_repos.sh", "\n",
+                "sudo sed -i 's|\\(^.*\\)develop|\\1", {"Fn::FindInMap":[{"Ref": "Env"},{"Ref": "AWS::Region"},"GitBranch"]}, "|g' /tmp/clone_git_repos.sh", "\n",
+                "sudo bash /tmp/clone_git_repos.sh", "\n",
+
+                "#=========== Install our app  ===========", "\n",
+                "# cd ${GITS_DIR}/aurelius/dev_cluster/deploy_scripts/amznlnx", "\n",
+                "# bash 01_install_virtenv.sh 2>&1", "\n",
+                "# bash 02_install_model.sh 2>&1", "\n",
+
+                "#=========== Send a notification for downstream users (could be other lambda functions) ===========", "\n",
+                "aws sns publish --topic-arn ", {"Ref":"SNSTopic"}, " --message \"EC2 instance finished initialization. Dev box ", {"Ref":"BaseName"}, "-", {"Ref":"Suffix"}, " is ready to use.\" --subject \"Dev box successfully initiated.\" ", "\n",
+
+              "# End of file #\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+
+    "SNSTopic" : {
+      "Type" : "AWS::SNS::Topic",
+      "Properties" : {
+        "Subscription" : [
+           { "Endpoint" : { "Ref":"OwnerContact" }, "Protocol" : "email" }
+        ],
+        "TopicName" : { "Ref":"SnsTopicName" }
+      }
+    }
+
+  },
+
+  "Outputs":{
+    "EC2PublicIp": {
+      "Value" : {"Fn::GetAtt":["EC2Instance", "PublicIp"]},
+      "Description" : "Public IP address of the EC2 instance"
+    }
+  }
+}

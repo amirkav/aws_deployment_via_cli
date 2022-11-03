@@ -1,0 +1,25 @@
+{
+    "BackupRetentionPeriod": 1,
+    "DatabaseName": "dbseneca02",
+    "DBClusterIdentifier": "rds-db-cluster-seneca-02",
+    "DBClusterParameterGroupName": "bbs-db-cluster-paramgroup-01",
+    "VpcSecurityGroupIds": ["sg-2a252856", "sg-35f5f949"],
+    "DBSubnetGroupName": "atlas_dev_w2_subnetgroup",
+    "Engine": "aurora-mysql",
+    "EngineVersion": "5.7",
+    "Port": 3306,
+    "MasterUsername": "bbsmasteruser",
+    "MasterUserPassword": "ThisIsATest",
+    "PreferredBackupWindow": "11:00-11:30",
+    "PreferredMaintenanceWindow": "sun:10:00-sun:10:30",
+    "Tags": [
+        {
+            "Key": "NotificationEndpoint",
+            "Value": "devops@altitudenetworks.com"
+        }
+    ],
+    "StorageEncrypted": true,
+    "KmsKeyId": "arn:aws:kms:us-west-2:474602133305:key/375c493c-7912-4afd-ad32-8828586f4197",
+    "EnableIAMDatabaseAuthentication": false,
+    "SourceRegion": "us-west-2"
+}

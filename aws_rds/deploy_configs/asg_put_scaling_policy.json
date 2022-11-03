@@ -1,0 +1,16 @@
+{
+  "PolicyName": "rds-asg-scaling-policy-cpu-util-45",
+  "ServiceNamespace": "rds",
+  "ResourceId": "cluster:rds-dbcluster-seneca-01",
+  "ScalableDimension": "rds:cluster:ReadReplicaCount",
+  "PolicyType": "TargetTrackingScaling",
+  "TargetTrackingScalingPolicyConfiguration": {
+    "TargetValue": 45.0,
+    "PredefinedMetricSpecification":
+    {
+      "PredefinedMetricType": "RDSReaderAverageCPUUtilization"
+    },
+    "ScaleInCooldown": 600,
+    "ScaleOutCooldown": 300
+  }
+}

@@ -1,0 +1,15 @@
+{
+    "CacheSubnetGroup": {
+        "VpcId": "vpc-37c3cd17",
+        "CacheSubnetGroupDescription": "Testing",
+        "Subnets": [
+            {
+                "SubnetIdentifier": "subnet-53df9c3a",
+                "SubnetAvailabilityZone": {
+                    "Name": "us-west-2a"
+                }
+            }
+        ],
+        "CacheSubnetGroupName": "mysubnetgroup"
+    }
+}

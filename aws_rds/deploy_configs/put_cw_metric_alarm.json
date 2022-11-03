@@ -1,0 +1,23 @@
+{
+  "AlarmName": "rds-db-instance-seneca-05-cpu-util-alarm",
+  "AlarmDescription": "CPU usage alarm for db instances",
+  "ActionsEnabled": true,
+  "AlarmActions": ["arn:aws:sns:us-west-2:474602133305:seneca-db"],
+  "OKActions" : ["arn:aws:sns:us-west-2:474602133305:seneca-db"],
+  "MetricName": "CPUUtilization",
+  "Namespace": "AWS/RDS",
+  "Statistic": "Average",
+  "Dimensions": [
+    {
+      "Name": "DBInstanceIdentifier",
+      "Value": "gsuite-dev-01"
+    }
+  ],
+  "Period": 300,
+  "Unit": "Percent",
+  "EvaluationPeriods": 15,
+  "DatapointsToAlarm": 15,
+  "Threshold": 85,
+  "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+  "TreatMissingData": "missing"
+}
