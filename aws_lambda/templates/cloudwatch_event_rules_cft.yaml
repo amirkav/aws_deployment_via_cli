@@ -1,0 +1,37 @@
+
+
+
+Resources:
+
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-events-rule.html
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-events-rule-target.html
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-events-rule-inputtransformer.html
+  # https://stackoverflow.com/questions/39041209/how-to-specify-json-formatted-string-in-cloudformation
+  ScheduledRuleCronJob:
+    Type: AWS::Events::Rule
+    Condition: ConditionInvocationEvent
+    Properties:
+      Description: "Cron job to run lambda functions regularly."
+      ScheduleExpression: "cron(00 09 * * ? *)"
+      State: "ENABLED"
+      Targets:
+        - Arn: !GetAtt
+            - "LambdaFunction"
+            - "Arn"
+          Id: "TargetFunctionV1"
+          Input: !Join [ "", [ "\"project_name\": \"", !Ref ProjectName, "\"" ] ]
+
+  # https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/permissions-reference-cwe.html
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Condition: ConditionInvocationEvent
+    Properties:
+      FunctionName:
+        Ref: "LambdaFunction"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+          - "ScheduledRuleCronJob"
+          - "Arn"
+

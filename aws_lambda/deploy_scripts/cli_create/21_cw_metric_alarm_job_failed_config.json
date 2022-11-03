@@ -1,0 +1,22 @@
+{
+  "AlarmName": "admin_directory_lambda-CWAlarm-Failed-01",
+  "AlarmDescription": "Issue a CW Alarm when Lambda job failed",
+  "ActionsEnabled": true,
+  "AlarmActions": ["arn:aws:sns:us-west-2:474602133305:dev-admin-directory-nightly-pull"],
+  "OKActions" : ["arn:aws:sns:us-west-2:474602133305:dev-admin-directory-nightly-pull"],
+  "MetricName": "Errors",
+  "Namespace": "AWS/Lambda",
+  "Statistic": "Sum",
+  "Dimensions": [
+    {
+      "Name": "FunctionName",
+      "Value": "admin_directory_lambda-02"
+    }
+  ],
+  "Period": 86400,
+  "Unit": "Count",
+  "EvaluationPeriods": 1,
+  "Threshold": 1,
+  "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+  "TreatMissingData": "breaching"
+}

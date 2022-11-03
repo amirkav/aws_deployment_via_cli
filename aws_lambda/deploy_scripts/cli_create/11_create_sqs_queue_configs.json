@@ -1,0 +1,9 @@
+{
+  "DelaySeconds": "0",
+  "KmsMasterKeyId": "alias/aws/sqs",
+  "KmsDataKeyReusePeriodSeconds": "300",
+  "MaximumMessageSize": "262144",
+  "MessageRetentionPeriod": "345600",
+  "VisibilityTimeout": "300",
+  "RedrivePolicy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:us-west-2:474602133305:thoughtlabs_dev_SQS_Queue_DLQ_03\",\"maxReceiveCount\":\"5\"}"
+}

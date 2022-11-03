@@ -1,0 +1,275 @@
+{
+    "widgets": [
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 0,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/RDS", "DatabaseConnections", "DBClusterIdentifier", "meerkat-dev-dbcluster-08", { "stat": "Maximum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "DB Connections"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 6,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "meerkat", "TooManyConnectionsCount", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "TooManyConnectionsCount"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 12,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "meerkat-dev-drive-files-q-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesVisible", ".", "meerkat-dev-drive-users-q-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesVisible", ".", "meerkat-dev-uploader-q-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "SQS Q Messages Count"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 18,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "meerkat-dev-drive-files-dlq-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesVisible", ".", "meerkat-dev-drive-users-dlq-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesVisible", ".", "meerkat-dev-uploader-dlq-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "SQS DLQ Messages Count"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 24,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "meerkat-dev-drive-files-rbq-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesVisible", ".", "meerkat-dev-drive-users-rbq-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesVisible", ".", "meerkat-dev-uploader-rbq-03", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApproximateNumberOfMessagesNotVisible", ".", ".", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "SQS RBQ Messages Count"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 30,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/Lambda", "Invocations", "FunctionName", "meerkat-dev-lambda-drive-scraper-files-orch-04", { "stat": "Sum", "period": 60 } ],
+                    [ "...", "meerkat-dev-lambda-drive-scraper-users-orch-04", { "stat": "Sum", "period": 60 } ],
+                    [ "...", "meerkat-dev-lambda-drive-scraper-worker-04", { "stat": "Sum", "period": 60 } ],
+                    [ "...", "meerkat-dev-lambda-master-uploader-04", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "LambdaInvocations"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 36,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/Lambda", "Duration", "FunctionName", "meerkat-dev-lambda-master-uploader-04", { "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "UploaderLambdaDuration"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 42,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/Lambda", "Errors", "FunctionName", "meerkat-dev-lambda-master-uploader-04", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "Throttles", ".", ".", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "LambdaErrorsThrottles"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 48,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "meerkat", "LambdaTimeOutCount", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "LambdaTimeoutCount"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 54,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "meerkat", "ApiRateLimitExceeded", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "ApiUserRateLimitExceeded", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "G Api Throttle Count"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 60,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "meerkat", "DuplicateRowsCount", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "InsertedRowsCount", { "stat": "Sum", "period": 60 } ],
+                    [ ".", "UpdatedRowsCount", { "stat": "Sum", "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "SQL Insert Stats"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 66,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/RDS", "SelectLatency", "DBClusterIdentifier", "meerkat-dev-dbcluster-08", { "period": 300 } ],
+                    [ ".", "DDLLatency", ".", "." ],
+                    [ ".", "UpdateLatency", ".", "." ],
+                    [ ".", "InsertLatency", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "DB Latency"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 72,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/RDS", "NetworkThroughput", "DBClusterIdentifier", "meerkat-dev-dbcluster-08", { "period": 60 } ],
+                    [ ".", "DMLThroughput", ".", ".", { "period": 60 } ],
+                    [ ".", "SelectThroughput", ".", ".", { "period": 60 } ],
+                    [ ".", "CommitThroughput", ".", ".", { "period": 60 } ],
+                    [ ".", "NetworkReceiveThroughput", ".", ".", { "period": 60 } ],
+                    [ ".", "ActiveTransactions", ".", ".", { "period": 60 } ],
+                    [ ".", "UpdateThroughput", ".", ".", { "period": 60 } ],
+                    [ ".", "InsertThroughput", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "DB Throughput"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 78,
+            "width": 24,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ "AWS/RDS", "CPUUtilization", "DBClusterIdentifier", "meerkat-dev-dbcluster-08", { "period": 60 } ],
+                    [ ".", "Queries", ".", ".", { "period": 60 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-west-2",
+                "period": 300,
+                "title": "DB Usage"
+            }
+        }
+    ]
+}

@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: A stack of Lambda function, CW Scheduled Events, and CW Alarms to orchestrate a batch job.
+# https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md
+
+#TODO: We have stopped development on SAM Local templates & scripts until the following two limitations are lifted:
+#TODO: (a) 'sam local invoke' command to support '--parameter-values' parameter
+#TODO: (b) SAM Local template to support intrinsic functions such as '!Ref', Conditionals, etc.
+
+Parameters:
+  FunctionName:
+    Default: atlas-dev-lambda-dir-master-scraper-01
+    Description: "Lambda function name."
+    Type: String
+    MinLength: "2"
+    MaxLength: "50"
+    AllowedPattern: "[\\x20-\\x7E]*"
+    ConstraintDescription: "can contain only ASCII characters. must be between 2 and 50 characters."
+
+  Suffix:
+    Default: 13
+    Description: "Suffix for names of stack resources. Should include a unique identifier such as app name or unique ID of the point of contact, and an incremental value to show version and iteration step."
+    Type: String
+    MinLength: "2"
+    MaxLength: "15"
+    AllowedPattern: "[\\x20-\\x7E]*"
+    ConstraintDescription: "can contain only ASCII characters. must be between 2 and 15 characters."
+
+  ProjectName:
+    Default: atlas
+    Description: "Name of the customer or project. We will use this value to reference other project-specific parameters in config files."
+    Type: String
+    MinLength: "2"
+    MaxLength: "20"
+    AllowedPattern: "[\\x20-\\x7E]*"
+    ConstraintDescription: "Should match a customer project name in config.json file. Can contain only ASCII characters. Min Length 2, Max Length 20"
+
+  Env:
+    Default: dev
+    Description: "Environment name"
+    Type: String
+    AllowedValues: ["dev", "qa", "perf", "prod"]
+    ConstraintDescription: "must be a valid environment name"
+
+  LambdaWorkerFunctionName:
+    Default: ""
+    Description: "The name of the worker lambda function. The orchestrator function handler needs this info to invoke the worker lambda."
+    Type: String
+    ConstraintDescription: "must be a valid worker lambda function name"
+
+  SubnetIds:
+    Default: subnet-c7eaf9a1,subnet-0e521c6565addfc8d,subnet-0f9952a6efb3c6bd0
+    Description: "A list of  Subnet IDs for the instance."
+    Type: List<AWS::EC2::Subnet::Id>
+    ConstraintDescription: "They all should be valid Subnet IDs in the VPC that you want to deploy the instance in."
+
+  SecurityGroupIds:
+    Default: sg-2a252856,sg-eb242997,sg-35f5f949
+    Description: "A list of Security Group IDs for the instance."
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    ConstraintDescription: "They all should be valid Security Group IDs, in the VPC that we are deploying the instance in."
+
+  AmiId:
+    Default: ""
+    Description: "The ID of the Amazon Machine Image (AMI) to use to deploy the instance."
+    Type: String
+    ConstraintDescription: "It should be a valid AMI ID"
+
+  SnsTopicName:
+    Default: atlas-dev-sns-dir-master-scraper-01
+    Description: "The name of the SNS Topic to be created for DB Cluster."
+    Type: String
+    ConstraintDescription: "Must be a valid Topic name."
+
+  SnsDlqTopicName:
+    Default: atlas-dev-snsdlq-dir-master-scraper-01
+    Description: "The name of the SNS Topic to be created for DB Cluster."
+    Type: String
+    ConstraintDescription: "Must be a valid SNS Topic name."
+
+  CWEventRuleName:
+    Default: atlas-dev-CWEventRule-dir-master-scraper-01
+    Description: "The name of the CloudWatch Events Rule to be created for DB Cluster."
+    Type: String
+    ConstraintDescription: "Must be a valid name for a CW Event Rule."
+
+  CWEventCronExpression:
+    Default: cron(0 10 * * ? *)
+    Description: "Crontab expression for the CloudWatch Events Rule."
+    Type: String
+    ConstraintDescription: "Must be a valid crontab expression. [min (0-59)] [hour (0-23)] [day of month (1-31)] [month (1-12)] [day of week (0-6) (Sunday=0)] "
+
+  LambdaS3Bucket:
+    Default: bbs-lambda-packages
+    Description: "The name of the bucket that contains your packaged lambda source code."
+    Type: String
+
+  LambdaS3Key:
+    Default: dir_master_scraper_lambda.zip
+    Description: "The name of the ZIP package of Lambda function."
+    Type: String
+
+  LambdaHandler:
+    Default: dir_master_scraper_handler.main_handler
+    Description: "The name of the python file and entry function that is the handler of lambda function."
+    Type: String
+
+  JobType:
+    Default: orchestrator
+    Description: "Lambda job type: orchestrator or worker. Orchestrator jobs need CloudWatch Events to be invoked. Worker jobs will be invoked by orchestrator jobs and dont need CW Events."
+    Type: String
+    AllowedValues: ["orchestrator", "worker"]
+    ConstraintDescription: "must be a valid job type"
+
+  OwnerContact:
+    Default: devops@altitudenetworks.com
+    Description: "Developer email"
+    Type: String
+    AllowedPattern: "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)"
+    ConstraintDescription: "Must be a valid email address."
+
+Mappings:
+  dev:
+    us-west-2:
+      LambdaExecutionIAMRoleARN: "arn:aws:iam::474602133305:role/BBS-Dev-Lambda-VPC-Execution-Role"
+
+Conditions:
+  ConditionCreateCWEvent: !Equals [!Ref JobType, orchestrator]
+
+Resources:
+  LambdaFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      CodeUri: /tmp/dir_master_scraper_lambda.zip
+      Description: "Nightly pull Lambda job to orchestrate pulling API data from G Suite and uploading to AN db."
+      Environment:
+        Variables:
+          VENV_DIR: "/tmp/venv"
+          DATA_DIR: "/tmp/data"
+          GITS_DIR: "/tmp/gits"
+          CONF_DIR: "/tmp/.credentials"
+          PROJECT_NAME: !Ref ProjectName
+          ENV: !Ref Env
+      FunctionName: !Ref FunctionName
+      Handler: !Ref LambdaHandler
+      MemorySize: 512
+      Role: arn:aws:iam::474602133305:role/BBS-Dev-Lambda-VPC-Execution-Role
+      Runtime: python2.7
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds: !Ref SecurityGroupIds
+        SubnetIds: !Ref SubnetIds
