@@ -1,0 +1,29 @@
+{
+  "cluster": "ecs-cluster-dev-seneca-01",
+  "serviceName": "ecs-service-dev-seneca-14",
+  "taskDefinition": "seneca-taskdef-02",
+  "loadBalancers": [
+    {
+      "targetGroupArn": "arn:aws:elasticloadbalancing:us-west-2:474602133305:targetgroup/ecs-tg-seneca-4/fb59d5802279c383",
+      "containerName": "seneca-cont",
+      "containerPort": 80
+    }
+  ],
+  "launchType": "EC2",
+  "role": "arn:aws:iam::474602133305:role/BBS-Dev-ECS-Member-Role",
+  "desiredCount": 3,
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 50
+  },
+  "placementStrategy": [
+    {
+      "field": "attribute:ecs.availability-zone",
+      "type": "spread"
+    },{
+      "field": "memory",
+      "type": "binpack"
+    }
+  ],
+  "healthCheckGracePeriodSeconds": 120
+}

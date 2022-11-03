@@ -1,0 +1,50 @@
+FROM amazonlinux:2017.12
+# FROM 137112412989.dkr.ecr.us-west-2.amazonaws.com/amazonlinux:latest
+USER root
+MAINTAINER devops@altitudenetworks.com
+
+###################
+### Note about "FROM" statement above:
+# Legacy Amazon Linux distro does not support systemd and systemctl.
+# But, the new Amazon Linux 2 does support systemctl and is preferred.
+# The Amazon Linux 2 docker image is still not posted to AWS ECR;
+# therefore, we are downloading the image from DockerHub for now.
+# When AWS adds Amazon Linux 2 to its ECR registry, we can
+# replace the DockerHub "FROM" statement with ECR statement (currently commented out).
+# https://docs.aws.amazon.com/AmazonECR/latest/userguide/amazon_linux_container_image.html
+# https://hub.docker.com/_/amazonlinux/
+# https://github.com/aws/amazon-linux-docker-images/tree/2017.12
+
+### USAGE: to test apache server, build an image from this
+# dockerfile, run a container from it and bind it to a port on
+# host machine, and browse to the port on a browser.
+# If the Apache server is running properly, you
+# should see a message "This Web Server is Running."
+
+# https://docs.docker.com/engine/reference/builder/#usage
+
+### Create an image dockerfile, and start a container from the image
+# On the command line:
+# $ cd /opt/gits/aurelius/ecs-cluster/dockerfile/amznlnx
+# $ sudo docker build -t test-server -f dockerfile-test-webserver .
+# $ sudo docker run -d -p 8080:80 --name=test-server-cont test-server
+
+### Test the running container
+# Browse to:
+# http://<ip_address>:8080/
+
+### Debug
+# ssh into the running container
+# $ docker run -i -t <image_id> /bin/bash
+
+# inside the container command prompt:
+# $ cat /etc/system-release
+# $ cat /etc/image-id
+###################
+
+RUN yum update -y
+RUN yum install -y httpd mod_ssl; yum clean all; systemctl enable httpd.service
+RUN echo "The Web Server is Running" > /var/www/html/index.html
+
+EXPOSE 80
+CMD mkdir /run/httpd ; /usr/sbin/httpd -D FOREGROUND

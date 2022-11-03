@@ -1,0 +1,140 @@
+FROM amazonlinux:2017.12
+# FROM 137112412989.dkr.ecr.us-west-2.amazonaws.com/amazonlinux:latest
+USER root
+MAINTAINER devops@altitudenetworks.com
+
+###################
+# Note: the commands in the DockerFile follow the same set of
+# operations and commands explained in "deploy_scripts" scripts.
+
+# USAGE
+# $ cd /opt/gits/aurelius/ecs-cluster/dockerfile/amznlnx
+# $ sudo docker build -t seneca-image -f dockerfile .
+# $ sudo docker run -d -p 8081:80 --name=seneca-cont seneca-image
+###################
+
+### Set environmental variables
+ENV VENV_DIR /opt/venv
+ENV DATA_DIR /opt/data
+ENV GITS_DIR /opt/gits
+ENV CONF_DIR /opt/.credentials
+
+### Install basics
+RUN yum update -y && yum install -y sudo jq which initscripts cronie git python-setuptools
+
+
+### (01) Install virtualenv
+RUN easy_install virtualenv
+RUN rm -rf $VENV_DIR
+RUN virtualenv $VENV_DIR
+RUN chmod -R 775 $VENV_DIR
+RUN /bin/bash -c 'source ${VENV_DIR}/bin/activate; pip install --upgrade pip'
+RUN /bin/bash -c 'source ${VENV_DIR}/bin/activate; pip install --upgrade awscli'
+# RUN /bin/bash -c 'source ${VENV_DIR}/bin/activate; pip install numpy scipy pandas sklearn flask flask-WTF'
+
+
+### (02) Install model
+RUN yum -y install gcc gcc-c++ kernel-devel
+RUN yum -y install python-devel libxslt-devel libffi-devel openssl-devel
+RUN yum -y install mysql mysql-devel mysql-common mysql-libs MySQL-python
+RUN mkdir -p ${DATA_DIR}
+
+### Copy model config files to container
+RUN mkdir -p ${CONF_DIR}
+RUN source ${VENV_DIR}/bin/activate; aws s3 cp s3://bbs-seneca-conf/G-Drive-Usage-Monitoring-1230647eac97.json ${CONF_DIR}/G-Drive-Usage-Monitoring-1230647eac97.json
+RUN source ${VENV_DIR}/bin/activate; aws s3 cp s3://bbs-seneca-conf/DriveSecurity-6355344cc1e0.json ${CONF_DIR}/DriveSecurity-6355344cc1e0.json
+RUN source ${VENV_DIR}/bin/activate; aws s3 cp s3://bbs-seneca-conf/config.json ${CONF_DIR}/config.json
+
+RUN rm -rf $GITS_DIR
+RUN mkdir ${GITS_DIR}
+WORKDIR /opt
+RUN GH_CREDS=$(source ${VENV_DIR}/bin/activate; aws ssm get-parameters --names "BBS-Seneca-Secret-GithubCredentials" --with-decryption --region "us-west-2") ; \
+    GH_PASS=$(source ${VENV_DIR}/bin/activate; echo ${GH_CREDS} | jq '.Parameters[0].Value' --raw-output) ; \
+    GH_USER=amirkav ; \
+    git clone -b develop https://${GH_USER}:${GH_PASS}@github.com/amirkav/seneca.git
+WORKDIR ${GITS_DIR}
+RUN /bin/bash -c 'source ${VENV_DIR}/bin/activate; pip install .'
+
+
+### Install Apache
+RUN yum install -y httpd mod_ssl; yum clean all; systemctl enable httpd.service
+
+
+### Install WSGI
+RUN yum install -y mod_wsgi
+
+
+### Set permissions
+RUN rm -rf /var/www/html/seneca-api
+RUN ln -sT ${GITS_DIR}/aurelius/elb_cluster/deploy_scripts/amznlnx /var/www/html/seneca-api
+
+RUN chown -R apache /var/www/html/seneca-api
+
+RUN chgrp -R apache /var/www/html
+RUN chmod -R 775 /var/www/html
+
+RUN chgrp -R apache ${VENV_DIR}
+RUN chmod -R 775 ${VENV_DIR}
+
+RUN chgrp -R apache ${GITS_DIR}
+RUN chmod -R 775 ${GITS_DIR}
+
+RUN chgrp -R apache ${DATA_DIR}
+RUN chmod -R 775 ${DATA_DIR}
+
+RUN chgrp -R apache ${CONF_DIR}
+RUN chmod -R 775 ${CONF_DIR}
+
+
+### (07) Start apache
+COPY seneca-api.conf /etc/httpd/conf.d/
+RUN chmod -R 755 /etc/httpd/conf.d/
+RUN mkdir -p /var/log/apache2/
+
+
+### (08) Set up logging
+COPY awslogs_container.conf ${GITS_DIR}/aurelius/ecs-cluster/logging_configs/awslogs_container.conf
+RUN mkdir -p /var/lib/awslogs
+RUN cd ${GITS_DIR}/aurelius/ecs-cluster/logging_configs && \
+  python ./awslogs-agent-setup.py -n -r us-west-2 -c ./awslogs_container.conf
+
+### (09) Set up supervisord
+RUN pip install supervisor
+COPY supervisord.conf /usr/etc/supervisord.conf
+
+
+### Set up ports
+EXPOSE 5000
+EXPOSE 80
+
+
+### Start the service
+# A service (eg, httpd) has to be entry point (pid=1) for the docker container,
+# and it needs to run in the foreground,
+# to continue running as a service without terminating.
+# We cannot use & or nohup in RUN, because each RUN command starts a new shell.
+
+# Flask app also needs to be running in the foreground, and
+# it needs to start with or after Apache server.
+# Note that the seneca-api.wsgi and seneca-api.conf scripts have instructions
+# to start our API with the start of httpd daemon,
+# so there is no need to start the Flask app separately.
+# In short, we start Apache server and Flask app together using the CMD command.
+
+# Docker containers dont have systemd or any process manager by default.
+# We cannot manually start httpd daemon inside a container;
+# it has to start with the DockerFile entry point.
+# If you try starting the apache daemon inside a container, you will get the following error:
+# Failed to get D-Bus connection: Operation not permitted
+# https://github.com/moby/moby/issues/7459
+
+# When we have more than one service, we can use 'supervisor' utility.
+# https://docs.docker.com/config/containers/multi-service_container/
+
+# Also note that we use the 'exec' form of CMD command. For more details, see:
+# https://www.ctl.io/developers/blog/post/dockerfile-entrypoint-vs-cmd/
+# http://goinbigdata.com/docker-run-vs-cmd-vs-entrypoint/
+# http://kimh.github.io/blog/en/docker/gotchas-in-writing-dockerfile-en/
+
+# CMD /usr/sbin/httpd -D FOREGROUND
+CMD ["/usr/bin/supervisord"]

@@ -1,0 +1,541 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Spin up an ECS Cluster and register container instances to it. We later define and start a Task Definition and an ECS Service to run Seneca API. Resources: CFT Stack, ECS Cluster, EC2 instances, ASG.",
+
+  "Parameters": {
+    "BaseName": {
+      "Description": "Base Name of the CloudFormation stack to be provisioned. We will add StackSuffix to this name to indicate app name and version.",
+      "Default": "ecs-stack",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "15",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+    "StackSuffix": {
+      "Description": "Suffix for names of stack resources. Should include a unique identifier such as app name or unique ID of the point of contact, and an incremental value to show version and iteration step.",
+      "Default": "seneca-10",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "15",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+    "ECSClusterBaseName": {
+      "Description": "Base Name of the ECS cluster. We will add StackSuffix to this name to indicate app name and version.",
+      "Default": "ecs-cluster",
+      "Type": "String"
+    },
+    "ProjectName": {
+      "Description": "Name of the customer or project. We will use this value to reference other project-specific parameters in config files.",
+      "Default": "thoughtlabs",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "20",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "Should match a customer project name in config.json file. Can contain only ASCII characters. Min Length 2, Max Length 15"
+    },
+
+    "Env": {
+      "Description": "Environment name",
+      "Default": "dev",
+      "Type": "String",
+      "AllowedValues": ["dev", "qa", "perf", "prod"],
+      "ConstraintDescription": "must be a valid environment name"
+    },
+
+    "KeyPairName": {
+      "Description": "Key Pair Name",
+      "Default": "BBS_KP",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "Must be the name of an existing EC2 KeyPair."
+    },
+    "AmiId": {
+      "Description": "The AMI image to build the EC2 instances.",
+      "Default": "ami-eb5fef93",
+      "Type": "String"
+    },
+
+    "OwnerContact": {
+      "Description": "Email of the point of contact.",
+      "Default": "devops@altitudenetworks.com",
+      "Type": "String",
+      "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
+      "ConstraintDescription": "Must be a valid email address."
+    },
+    "AsgRole": {
+      "Description": "Role of ASG. Usually a short word and is used in shell script names (and before as a Chef role)",
+      "Default": "ecsasg",
+      "Type": "String"
+    },
+
+    "VpcId" : {
+      "Description" : "The ID of the VPC where the resources in this template will be created.",
+      "Default" : "vpc-d4c914ad",
+      "Type" : "String"
+    }
+
+  },
+
+
+  "Mappings": {
+    "dev": {
+      "us-west-2": {
+        "sshKeyPair" : "BBS_KP",
+        "appInstanceType" : "t2.medium",
+        "ASGDesiredSize" : "2",
+        "ASGMinSize" : "1",
+        "ASGMaxSize" : "5",
+        "InstanceSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-ae8f82d2"],
+        "AlbSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-b48b86c8"],
+        "ALBScheme" : "internet-facing",
+        "SubnetAZ1" : "subnet-f3e6f595",
+        "SubnetAZ2" : "subnet-02fa0570d0c5dd119",
+        "AppSubnets" : ["subnet-f3e6f595", "subnet-02fa0570d0c5dd119"],
+        "IAMRole" : "BBS-Dev-EC2InECS-Role",
+        "IAMRoleECS" : "BBS-Dev-ECS-Member-Role"
+      },
+      "us-east-1": {
+        "sshKeyPair" : "BBS_KP",
+        "appInstanceType" : "t2.medium",
+        "ASGDesiredSize" : "2",
+        "ASGMinSize" : "1",
+        "ASGMaxSize" : "5",
+        "InstanceSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-ae8f82d2"],
+        "AlbSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-b48b86c8"],
+        "ALBScheme" : "internet-facing",
+        "SubnetAZ1" : "",
+        "SubnetAZ2" : "",
+        "AppSubnets" : [""],
+        "IAMRole" : "BBS-Dev-EC2InECS-Role",
+        "IAMRoleECS" : "BBS-Dev-ECS-Member-Role"
+      }
+    },
+
+    "qa": {
+      "us-west-2": {
+        "sshKeyPair" : "BBS_KP",
+        "appInstanceType" : "t2.medium",
+        "ASGDesiredSize" : "2",
+        "ASGMinSize" : "1",
+        "ASGMaxSize" : "5",
+        "InstanceSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-ae8f82d2"],
+        "AlbSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-b48b86c8"],
+        "ALBScheme" : "internet-facing",
+        "SubnetAZ1" : "subnet-f3e6f595",
+        "SubnetAZ2" : "subnet-02fa0570d0c5dd119",
+        "AppSubnets" : ["subnet-f3e6f595", "subnet-02fa0570d0c5dd119"],
+        "IAMRole" : "BBS-Dev-EC2InECS-Role",
+        "IAMRoleECS" : "BBS-Dev-ECS-Member-Role"
+      },
+      "us-east-1": {
+        "sshKeyPair" : "BBS_KP",
+        "appInstanceType" : "t2.medium",
+        "ASGDesiredSize" : "2",
+        "ASGMinSize" : "1",
+        "ASGMaxSize" : "5",
+        "InstanceSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-ae8f82d2"],
+        "AlbSecurityGroups" : ["sg-2a252856", "sg-35f5f949", "sg-b48b86c8"],
+        "ALBScheme" : "internet-facing",
+        "SubnetAZ1" : "",
+        "SubnetAZ2" : "",
+        "AppSubnets" : [""],
+        "IAMRole" : "BBS-Dev-EC2InECS-Role",
+        "IAMRoleECS" : "BBS-Dev-ECS-Member-Role"
+      }
+    },
+
+    "prod": {
+      "us-west-2": {
+        "sshKeyPair" : "BBS_KP"
+      },
+      "us-east-1": {
+        "sshKeyPair" : "BBS_KP"
+      }
+    }
+  },
+
+
+  "Resources": {
+
+    "ECSCluster":{
+      "Type" : "AWS::ECS::Cluster",
+      "Properties" : {
+        "ClusterName" : {"Fn::Join": ["-",[{"Ref": "ECSClusterBaseName"}, {"Ref": "Env"}, {"Ref": "StackSuffix"}]]}
+      }
+    },
+
+    "AppALB": {
+      "Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "DependsOn": ["ECSCluster"],
+      "Properties" : {
+        "Name" : { "Fn::Join":[ "-", [ "ecs-alb", {"Ref":"Env"}, {"Ref":"StackSuffix"} ] ] },
+        "Scheme" : { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "ALBScheme" ] },
+        "SecurityGroups" : { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "AlbSecurityGroups" ] },
+        "Subnets" : [
+          { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "SubnetAZ1" ] },
+          { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "SubnetAZ2" ] }
+        ],
+        "Tags" : [
+          {"Key":"Name", "Value" : {"Fn::Join": ["-",[ "ecs-alb", {"Ref":"Env"}, {"Ref":"StackSuffix"}]] } },
+          {"Key":"OwnerContact", "Value" : { "Ref": "OwnerContact" } },
+          {"Key":"App Name", "Value" : { "Fn::Join":[ "-", [ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"StackSuffix"} ] ] } }
+        ],
+        "IpAddressType" : "ipv4"
+      }
+    },
+
+    "AppTargetGroup" : {
+      "Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "DependsOn": ["ECSCluster"],
+      "Properties" : {
+        "HealthCheckIntervalSeconds" : 30,
+        "HealthCheckPath" : "/",
+        "HealthCheckPort" : 80,
+        "HealthCheckProtocol" : "HTTP",
+        "HealthCheckTimeoutSeconds" : 3,
+        "HealthyThresholdCount" : 2,
+        "UnhealthyThresholdCount" : 4,
+        "Name" : {"Fn::Join": ["-",["ecs-tg", {"Ref": "Env"}, {"Ref": "StackSuffix"}]]},
+        "Port" : 80,
+        "Protocol" : "HTTP",
+        "Tags" : [
+          {"Key":"Name", "Value" : {"Fn::Join": ["-",[ "ecs-tg", {"Ref":"Env"}, {"Ref":"StackSuffix"}]] } },
+          {"Key":"OwnerContact", "Value" : { "Ref": "OwnerContact" } },
+          {"Key":"App Name", "Value" : { "Fn::Join":[ "-", [ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"StackSuffix"} ] ] } }
+        ],
+        "VpcId" : { "Ref": "VpcId" }
+      }
+    },
+
+    "AppAsgAutoScalingPolicy" : {
+      "DependsOn": ["ECSCluster", "AppASG"],
+      "Type" : "AWS::AutoScaling::ScalingPolicy",
+      "Properties" : {
+        "AdjustmentType" : "ChangeInCapacity",
+        "AutoScalingGroupName" : {"Ref" : "AppASG"},
+        "Cooldown" : "60",
+        "EstimatedInstanceWarmup" : "60",
+        "PolicyType" : "TargetTrackingScaling",
+        "TargetTrackingConfiguration" : {
+          "TargetValue": 75.0,
+          "PredefinedMetricSpecification": {"PredefinedMetricType": "ASGAverageCPUUtilization"}
+        }
+      }
+    },
+
+    "AppASG": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "DependsOn": ["ECSCluster", "AppTargetGroup"],
+      "Properties": {
+        "DesiredCapacity": { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGDesiredSize"] },
+        "MinSize":  { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMinSize"] },
+        "MaxSize":  { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMaxSize"] },
+        "HealthCheckGracePeriod": 1200,
+        "HealthCheckType": "EC2",
+        "LaunchConfigurationName": { "Ref": "AppLaunchConfig" },
+        "Tags": [
+          {
+            "Key": "Name", "Value": {"Fn::Join": ["-",["ecs-instance", {"Ref": "Env"}, {"Ref": "StackSuffix"}]]},
+            "PropagateAtLaunch": "true",
+            "Description": "This name will be assigned to all EC2 instances in this ASG. But, it will not be assigned to the ASG resource itself."
+          },
+          {
+            "Key": "OwnerContact",
+            "Value": { "Ref": "OwnerContact" },
+            "PropagateAtLaunch": "true"
+          }
+        ],
+        "TargetGroupARNs" : [ { "Ref" : "AppTargetGroup" } ],
+        "VPCZoneIdentifier": [
+          { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "SubnetAZ1" ] },
+          { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "SubnetAZ2" ] }
+        ]
+      },
+      "UpdatePolicy" : {
+        "AutoScalingScheduledAction" : {"IgnoreUnmodifiedGroupSizeProperties" : "true"},
+        "AutoScalingReplacingUpdate" : {"WillReplace" : "false"}
+      }
+    },
+
+    "AppAlbListener" : {
+      "Type" : "AWS::ElasticLoadBalancingV2::Listener",
+      "DependsOn": ["AppALB", "AppTargetGroup"],
+      "Properties" : {
+        "DefaultActions": [{
+          "Type": "forward",
+          "TargetGroupArn": { "Ref": "AppTargetGroup" }
+        }],
+        "LoadBalancerArn": { "Ref": "AppALB" },
+        "Port": "80",
+        "Protocol": "HTTP"
+      }
+    },
+
+    "AppTaskDefinition" : {
+      "Type": "AWS::ECS::TaskDefinition",
+      "DependsOn": ["ECSCluster"],
+      "Properties" : {
+        "ContainerDefinitions" : [
+          {
+            "Image": "474602133305.dkr.ecr.us-west-2.amazonaws.com/seneca:1.3",
+            "Name": "seneca-cont",
+            "PortMappings": [
+              {
+                "HostPort": 80,
+                "ContainerPort": 80,
+                "Protocol": "tcp"
+              }
+            ],
+            "Memory": 512,
+            "Cpu": 512,
+            "Essential": true,
+            "Environment": [],
+            "MountPoints": [
+              {
+                "SourceVolume": "AppConfig",
+                "ContainerPath": "/etc/seneca"
+              },
+              {
+                "SourceVolume": "AppData",
+                "ContainerPath": "/var/lib/seneca/data"
+              },
+              {
+                "SourceVolume": "AppLog",
+                "ContainerPath": "/var/log/seneca"
+              }
+            ],
+            "VolumesFrom": [],
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": "awslogs-seneca",
+                "awslogs-region": "us-west-2",
+                "awslogs-stream-prefix": "seneca-container"
+              }
+            },
+            "Privileged" : true
+          }
+        ],
+        "Cpu" : "1 vCPU",
+        "Memory" : "1 GB",
+        "TaskRoleArn" : {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRoleECS"]},
+        "Family" : {"Fn::Join": ["-",[ "ecs-taskfam", {"Ref":"Env"}, {"Ref":"StackSuffix"}]] },
+        "NetworkMode" : "host",
+        "Volumes" : [
+          {
+            "Name": "AppConfig",
+            "Host": {"SourcePath": "/etc/seneca"}
+          },
+          {
+            "Name": "AppData",
+            "Host": {"SourcePath": "/var/lib/seneca/data"}
+          },
+          {
+            "Name": "AppLog",
+            "Host": {"SourcePath": "/var/log/seneca"}
+          }
+        ]
+      }
+    },
+
+    "AppService": {
+      "Type": "AWS::ECS::Service",
+      "DependsOn": ["AppALB", "AppTaskDefinition"],
+      "Properties" : {
+        "ServiceName": {"Fn::Join": ["-",[ "ecs-service", {"Ref":"Env"}, {"Ref":"StackSuffix"}]] },
+        "Cluster": {"Ref": "ECSCluster"},
+        "TaskDefinition" : {"Ref":"AppTaskDefinition"},
+        "DesiredCount": 2,
+        "LaunchType": "EC2",
+        "LoadBalancers": [
+          {
+            "ContainerName": "seneca-cont",
+            "ContainerPort": "80",
+            "TargetGroupArn" : { "Ref" : "AppTargetGroup" }
+          }
+        ],
+        "Role" : {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRoleECS"]},
+        "DeploymentConfiguration": {
+          "MaximumPercent": 200,
+          "MinimumHealthyPercent": 50
+        },
+        "PlacementStrategies": [
+          {
+            "Field": "attribute:ecs.availability-zone",
+            "Type": "spread"
+          },{
+            "Field": "memory",
+            "Type": "binpack"
+          }
+        ],
+        "HealthCheckGracePeriodSeconds": 120
+      }
+    },
+
+    "AppServiceAutoScalingTarget" : {
+      "Type" : "AWS::ApplicationAutoScaling::ScalableTarget",
+      "DependsOn" : "AppService",
+      "Properties" : {
+        "MaxCapacity" : 10,
+        "MinCapacity" : 1,
+        "ResourceId" : {"Fn::Join":["", ["service/", {"Ref":"ECSCluster"}, "/", {"Fn::GetAtt":["AppService", "Name"]} ] ] },
+        "RoleARN" : {"Fn::Join":["", ["arn:aws:iam::474602133305:role/", {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRoleECS"]} ] ] },
+        "ScalableDimension" : "ecs:service:DesiredCount",
+        "ServiceNamespace" : "ecs"
+      }
+    },
+
+    "AppServiceAutoScalingPolicy" : {
+      "Type" : "AWS::ApplicationAutoScaling::ScalingPolicy",
+      "Properties" : {
+        "PolicyName" : {"Fn::Join": ["-",[ "ecs-service-as-policy", {"Ref":"Env"}, {"Ref":"StackSuffix"}]] },
+        "PolicyType" : "TargetTrackingScaling",
+        "ScalingTargetId" : {"Ref":"AppServiceAutoScalingTarget"},
+        "TargetTrackingScalingPolicyConfiguration" : {
+          "PredefinedMetricSpecification" : {"PredefinedMetricType" : "ECSServiceAverageCPUUtilization"},
+          "ScaleInCooldown" : 60,
+          "ScaleOutCooldown" : 60,
+          "TargetValue" : 75
+        }
+      }
+    },
+
+    "AppLaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Metadata": {
+        "AWS::CloudFormation::Authentication": {
+          "S3AccessCreds": {
+            "type": "S3",
+            "roleName": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]}
+          }
+        }
+      },
+      "Properties": {
+        "ImageId": {"Ref": "AmiId"},
+        "KeyName": {"Ref": "KeyPairName"},
+        "InstanceType": {"Fn::FindInMap": [{ "Ref": "Env"}, {"Ref": "AWS::Region"}, "appInstanceType"]},
+        "IamInstanceProfile": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]},
+        "SecurityGroups": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "InstanceSecurityGroups"]},
+        "InstanceMonitoring": "false",
+        "BlockDeviceMappings": [{"DeviceName": "/dev/xvda", "Ebs": {"VolumeSize": "20"}}],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": ["\n",
+              [
+                "#!/usr/bin/env bash",
+                "exec > >(tee /var/log/user-data.log) 2>&1",
+                "set -o errexit -o nounset -o xtrace",
+
+                "#====== Set env vars ======",
+                "sudo /bin/echo 'export VENV_DIR=/opt/venv' >> /etc/environment",
+                "sudo /bin/echo 'export DATA_DIR=/opt/data' >> /etc/environment",
+                "sudo /bin/echo 'export GITS_DIR=/opt/gits' >> /etc/environment",
+                "sudo /bin/echo 'export CONF_DIR=/opt/.credentials' >> /etc/environment",
+                {"Fn::Join":["",[ "sudo /bin/echo \"export ECS_CLUSTER=", {"Fn::Join": ["-",[{"Ref": "ECSClusterBaseName"}, {"Ref": "Env"}, {"Ref": "StackSuffix"}]]}, "\" >> /etc/environment"]]},
+                "sudo /bin/echo \"export CONTAINER_INSTANCE_ID=$(curl http://169.254.169.254/latest/meta-data/instance-id)\" >> /etc/environment",
+                "source /etc/environment",
+
+
+                "#====== INSTALL APPS & TOOLS ======",
+                "#=== Install & configure docker ===",
+                "sudo yum update && sudo yum install -y yum-utils",
+                "sudo yum update && yum install -y jq 2>&1",
+                "sudo yum update && yum-config-manager --enable rhui-us-west-2-rhel-server-extras",
+                "sudo yum update && yum install -y docker",
+                "sudo usermod -a -G docker ec2-user",
+
+                "#=== Install aws cli tool ===",
+                "sudo easy_install pip ",
+                "sudo pip install --upgrade awscli ",
+
+
+                "#====== CONFIGURE NETWORKING ======",
+                "#=== Allow the port proxy to route traffic using loopback addresses ===",
+                "sudo sh -c \"echo 'net.ipv4.conf.all.route_localnet = 1' >> /etc/sysctl.conf\"",
+                "sudo sysctl -p /etc/sysctl.conf",
+
+                "#=== Enable IAM roles for tasks ===",
+                "sudo iptables -t nat -A PREROUTING -p tcp -d 169.254.170.2 --dport 80 -j DNAT --to-destination 127.0.0.1:51679",
+                "iptables -t nat -A OUTPUT -d 169.254.170.2 -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 51679",
+
+                "#=== Write the new iptables configuration ===",
+                "sudo sh -c 'iptables-save > /etc/sysconfig/iptables'",
+
+
+                "#====== CONFIGURE ECS AGENT ======",
+                "#=== Create the host volume mount points on your container instance ===",
+                "sudo mkdir -p /var/log/ecs /var/lib/ecs/data",
+
+                "#=== Create the /etc/ecs directory and ECS container agent configuration file ===",
+                "sudo mkdir -p /etc/ecs",
+                "sudo aws s3 cp s3://bbs-seneca-conf-pub/ecs.config /etc/ecs/ecs.config",
+                {"Fn::Join":["",[ "sed -i.bak 's/${ECS_CLUSTER}/", {"Fn::Join": ["-",[{"Ref": "ECSClusterBaseName"}, {"Ref": "Env"}, {"Ref": "StackSuffix"}]]}, "/g' /etc/ecs/ecs.config"]]},
+
+                "#=== Create ecs-agent service file ===",
+                "sudo aws s3 cp s3://bbs-seneca-conf-pub/ecs-agent.service /etc/systemd/system/ecs-agent.service",
+                {"Fn::Join":["",[ "sed -i.bak 's/${ECS_CLUSTER}/", {"Fn::Join": ["-",[{"Ref": "ECSClusterBaseName"}, {"Ref": "Env"}, {"Ref": "StackSuffix"}]]}, "/g' /etc/systemd/system/ecs-agent.service"]]},
+
+                "#=== Register the ecs agent as a daemon ===",
+                "sudo aws s3 cp s3://bbs-seneca-conf-pub/ecs-agent.timer /etc/systemd/system/ecs-agent.timer",
+                {"Fn::Join":["",[ "sed -i.bak 's/${ECS_CLUSTER}/", {"Fn::Join": ["-",[{"Ref": "ECSClusterBaseName"}, {"Ref": "Env"}, {"Ref": "StackSuffix"}]]}, "/g' /etc/systemd/system/ecs-agent.timer"]]},
+
+                "#=== Make instance id and ip accessible for ecs agent ===",
+                "sudo curl -o /etc/local-ipv4 http://169.254.169.254/latest/meta-data/local-ipv4 ",
+                "sudo chmod a+r /etc/local-ipv4 ",
+                "sudo curl -o /etc/instance-id http://169.254.169.254/latest/meta-data/instance-id ",
+                "sudo chmod a+r /etc/instance-id ",
+
+
+                "#====== CREATE CLUSTER ======",
+                {"Fn::Join":["",[ "aws ecs create-cluster --region us-west-2 --cluster-name ", {"Fn::Join": ["-",[{"Ref": "ECSClusterBaseName"}, {"Ref": "Env"}, {"Ref": "StackSuffix"}]]} ]]},
+
+
+                "#====== CONFIGURE LOGGING and MONITORING ======",
+                "#====== Define volumes to mount into containers ======",
+                "sudo mkdir -p /var/log/seneca /var/lib/seneca/data /etc/seneca",
+                "sudo mkdir -p /etc/apache/conf /var/apache/html /etc/apache/conf.d",
+
+                "#====== Install and configure CloudWatch Logs agent for container instance logger ======",
+                "sudo yum install -y awslogs",
+                "sudo aws s3 cp s3://bbs-seneca-conf-pub/awslogs.conf /etc/awslogs/awslogs.conf",
+                "sudo sed -i -e \"s/{cluster}/${ECS_CLUSTER}/g\" /etc/awslogs/awslogs.conf",
+                "sudo sed -i -e \"s/{container_instance_id}/${CONTAINER_INSTANCE_ID}/g\" /etc/awslogs/awslogs.conf",
+                "sudo sed -i -e \"s/us-east-1/us-west-2/g\" /etc/awslogs/awscli.conf",
+                "sudo /bin/systemctl start awslogsd",
+                "sudo /bin/systemctl enable awslogsd.service",
+                "#sudo vi /var/log/awslogs.log",
+
+                "#=== Update awslogs configs for container logger ===",
+                "#sudo sed -i -e \"s/{cluster}/${ECS_CLUSTER}/g\" ${GITS_DIR}/aurelius/ecs-cluster/logging_configs/awslogs_container.conf",
+                "#sudo sed -i -e \"s/{container_instance_id}/${CONTAINER_INSTANCE_ID}/g\" ${GITS_DIR}/aurelius/ecs-cluster/logging_configs/awslogs_container.conf",
+                "#sudo cp ${GITS_DIR}/aurelius/ecs-cluster/logging_configs/awslogs_container.conf ${GITS_DIR}/aurelius/ecs-cluster/dockerfile/amznlnx/awslogs_container.conf",
+
+
+                "#====== START ECS-AGENT ======",
+                "sudo /bin/systemctl --system daemon-reload ",
+                "sudo /bin/systemctl enable lvm2-monitor.service ",
+                "sudo /bin/systemctl enable lvm2-lvmetad.service ",
+
+                "sudo /bin/systemctl enable docker.service ",
+                "sudo /bin/systemctl enable ecs-agent.service ",
+                "sudo /bin/systemctl start ecs-agent.timer ",
+
+
+              "# End of file #\n"
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+
+
+  "Outputs":{
+    "AlbDnsName": {
+      "Value" : {"Fn::GetAtt":["AppALB", "DNSName"]},
+      "Description" : "Application Load Balancer DNS Name"
+    }
+  }
+}

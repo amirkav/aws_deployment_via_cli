@@ -1,0 +1,22 @@
+[Unit]
+Description=registrator
+Requires=consul.service
+After=consul.service
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=0
+
+ExecStartPre=-/usr/bin/docker kill registrator
+ExecStartPre=-/usr/bin/docker rm registrator
+ExecStartPre=/usr/bin/docker pull <path_to_registrator>
+
+ExecStart=/usr/bin/docker run --name=registrator
+    --volume=/var/run/docker.sock:/tmp/docker.sock
+    --net=host <RegistratorImageName>
+    consul://`cat /etc/local-ipv4`:8500
+ExecStop=/usr/bin/docker stop registrator
+
+[Install]
+WantedBy=multi-user.target
+

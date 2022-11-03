@@ -1,0 +1,5 @@
+[Unit]
+[Timer]
+OnStartupSec=2min
+[Install]
+WantedBy=multi-user.target

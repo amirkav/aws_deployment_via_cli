@@ -1,0 +1,18 @@
+{
+    "LaunchConfigurationName": "",
+    "ImageId": "ami-eb5fef93",
+    "KeyName": "BBS_KP",
+    "SecurityGroups": ["sg-2a252856", "sg-35f5f949", "sg-ae8f82d2"],
+    "InstanceType": "t2.medium",
+    "BlockDeviceMappings": [
+        {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+                "VolumeSize": 20,
+                "DeleteOnTermination": true
+            }
+        }
+    ],
+    "InstanceMonitoring": {"Enabled": true},
+    "IamInstanceProfile": "BBS-Dev-EC2InECS-Role"
+}

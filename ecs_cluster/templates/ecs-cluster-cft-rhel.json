@@ -1,0 +1,430 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Spin up an ECS Cluster that runs seneca. Resources: EC2 cluster, ASG, ALB, ECS Service.",
+
+  "Parameters": {
+    "BaseName": {
+      "Description": "Base Name of the stack to be provisioned. Used to generate instance names",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "10",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+    "StackSuffix": {
+      "Description": "Suffix for names of stack resources. Should include a unique identifier such as app name or unique ID of the point of contact, and an incremental value to show versioning and iteration step.",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "10",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+    "ProjectName": {
+      "Description": "Name of the customer or project. We will use this value to reference other project-specific parameters in config files.",
+      "Default": "thoughtlabs",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "20",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "Should match a customer project name in config.json file. Can contain only ASCII characters. Min Length 2, Max Length 15"
+    },
+
+    "ECSClusterName": {
+      "Description": "Name of ECS cluster to connect the ASG to",
+      "Type": "String"
+    },
+    "ContainerInstanceName" : {
+      "Description" : "The name of your instance",
+      "Type" : "String",
+      "Default" : "seneca-ecs-instance-01"
+    },
+    "ECSServiceName": {
+      "Description": "Name of the service (e.g. nsb-oao-cigs). We are not creating an ECS service in this template yet; but, we need to make references to the ECS service that will later be created on this cluster. E.g.,, the ECS service name is used to create unique paths in S3 (see S3ProvisioningBucket).",
+      "Default": "seneca-ecs-service-01",
+      "Type": "String"
+    },
+
+    "KeyPairName": {
+      "Description": "Key Pair Name",
+      "Default": "BBS_KP",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "Must be the name of an existing EC2 KeyPair."
+    },
+    "AmiId": {
+      "Description": "The AMI image to build the EC2 instances.",
+      "Default": "ami-eb5fef93",
+      "Type": "String"
+    },
+    "Env": {
+      "Description": "Environment name",
+      "Default": "dev",
+      "Type": "String",
+      "AllowedValues": ["dev", "qa", "perf", "prod"],
+      "ConstraintDescription": "must be a valid environment name"
+    },
+
+    "S3ProvisioningBucket": {
+      "Description": "S3 bucket where the provisioning folder is located",
+      "Default": "sbb-analytics-2",
+      "Type": "String"
+    },
+    "S3FolderSuffix": {
+      "Description": "Folder suffix that uniquely identifies the S3 object (Bucket/Env/Region/ECSServiceName-S3FolderSuffix) containing the ECSServiceName runtime-scripts that bootstrap your instance.",
+      "Default": "seneca",
+      "Type": "String"
+    },
+    "ExtraPackagesFileName": {
+      "Description": "A .tar file containing software not available from enterprise artifact repositories. Scripts from runtime-scripts use this file to provision your instance.",
+      "Type": "String",
+      "Default": "extra-packages-ecs-cluster.tar.gz"
+    },
+    "ECSAgentImageName": {
+      "Description": "Full name of the AWS ECS Agent docker image including version tag.",
+      "Type": "String",
+      "Default": ""
+    },
+    "RegistratorImageName": {
+      "Description": "Full name of the ECS agent registrator image including version tag.",
+      "Type": "String",
+      "Default": ""
+    },
+
+    "OwnerContact": {
+      "Description": "Email of the point of contact.",
+      "Default": "devops@altitudenetworks.com",
+      "Type": "String",
+      "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
+      "ConstraintDescription": "Must be a valid email address."
+    },
+    "AsgRole": {
+      "Description": "Role of ASG. Usually a short word and is used in shell script names (and before as a Chef role)",
+      "Type": "String",
+      "Default": "ecsasg"
+    }
+
+  },
+
+  "Mappings": {
+    "dev": {
+      "us-west-2": {
+        "sshKeyPair"        : "BBS_KP",
+        "appInstanceType"   : "m4.large",
+        "ASGMinMax"         : "3",
+
+        "AppSecurityGroups" : ["sg-2a252856", "sg-35f5f949"],
+        "beSubnets"         : ["subnet-f3e6f595"],
+        "IAMRole"           : "BBS-Dev-EC2InECS-Role"
+      }
+    },
+
+    "qa": {
+      "us-west-2": {
+        "sshKeyPair"        : "BBS_KP",
+        "appInstanceType"   : "m4.large",
+        "ASGMinMax"         : "3",
+
+        "AppSecurityGroups" : ["sg-2a252856", "sg-35f5f949"],
+        "beSubnets"         : ["subnet-f3e6f595"],
+        "IAMRole"           : "BBS-Dev-EC2InECS-Role"
+      },
+      "us-east-1": {
+        "sshKeyPair"        : "BBS_KP"
+      }
+    },
+
+    "prod": {
+      "us-west-2": {
+        "sshKeyPair"        : "BBS_KP"
+      },
+      "us-east-1": {
+        "sshKeyPair"        : "BBS_KP"
+      }
+    }
+  },
+
+
+  "Resources": {
+
+    "Cluster":{
+      "Type" : "AWS::ECS::Cluster",
+      "Properties" : {
+        "ClusterName" : {"Ref": "ECSClusterName"}
+      }
+    },
+
+    "AppASG": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "VPCZoneIdentifier": {"Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "beSubnets"]},
+        "HealthCheckType": "EC2",
+        "HealthCheckGracePeriod": 1200,
+        "LaunchConfigurationName": { "Ref": "AppLaunchConfig" },
+        "DesiredCapacity": { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMinMax"] },
+        "MinSize":  { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMinMax"] },
+        "MaxSize":  { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMinMax"] },
+        "NotificationConfiguration": {
+          "TopicARN": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "SNSOpsNotifyTopic"]},
+          "NotificationTypes": [
+            "autoscaling:EC2_INSTANCE_LAUNCH",
+            "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+            "autoscaling:EC2_INSTANCE_TERMINATE",
+            "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": { "Fn::Join": ["",[{ "Ref": "ECSClusterName"}, "-instance"]] },
+            "PropagateAtLaunch": "true",
+            "Description": "This name will be assigned to all EC2 instances in this ASG. But, it will not be assigned to the ASG resource itself."
+          },
+          {
+            "Key": "OwnerContact",
+            "Value": { "Ref": "OwnerContact" },
+            "PropagateAtLaunch": "true"
+          }
+        ]
+      },
+      "DependsOn": "Cluster",
+      "UpdatePolicy" : {
+        "AutoScalingScheduledAction" : {"IgnoreUnmodifiedGroupSizeProperties" : "true"},
+        "AutoScalingReplacingUpdate" : {"WillReplace" : "false"}
+      }
+    },
+
+    "AppLaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Metadata": {
+        "AWS::CloudFormation::Authentication": {
+          "S3AccessCreds": {
+            "type": "S3",
+            "roleName": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]}
+          }
+        },
+        "AWS::CloudFormation::Init": {
+          "config": {
+            "files": {
+              "/opt/kentro/bin/runtime-scripts.tar.gz": {
+                "source": {
+                  "Fn::Join": [
+                    "",
+                    [ "https://",  { "Ref": "S3ProvisioningBucket" },
+                      ".s3.amazonaws.com/",
+                      { "Ref": "Env"}, "/",
+                      { "Ref": "AWS::Region" }, "/",
+                      { "Ref": "ECSServiceName" }, "-",
+                      { "Ref": "S3FolderSuffix" }, "/",
+                      "runtime-scripts.tar.gz"
+                    ]
+                  ]
+                },
+                "mode": "000400",
+                "owner": "ec2-user",
+                "group": "ec2-user",
+                "authentication": "S3AccessCreds"
+              },
+
+              "/opt/kentro/extras/extra-packages.tar.gz": {
+                "source": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "https://",
+                      { "Ref": "S3ProvisioningBucket" },
+                      ".s3.amazonaws.com/",
+                      "extras", "/",
+                      { "Ref": "ExtraPackagesFileName" }
+                    ]
+                  ]
+                },
+                "mode": "000400",
+                "owner": "ec2-user",
+                "group": "ec2-user",
+                "authentication": "S3AccessCreds"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId": {"Ref": "AmiId"},
+        "KeyName": {"Ref": "KeyPairName"},
+        "InstanceType": {"Fn::FindInMap": [{ "Ref": "Env"}, {"Ref": "AWS::Region"}, "appInstanceType"]},
+        "IamInstanceProfile": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]},
+        "SecurityGroups": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "AppSecurityGroups"]},
+        "InstanceMonitoring": "false",
+        "BlockDeviceMappings": [{"DeviceName": "/dev/xvda", "Ebs": {"VolumeSize": "20"}}],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": ["\n",
+              [
+                "#!/usr/bin/env bash",
+                "exec > >(tee /var/log/user-data.log) 2>&1",
+                "set -o errexit -o nounset -o xtrace",
+
+                "#=========== Set env vars ===========",
+                "# /bin/echo 'export test=\"test\"' >> /etc/environment",
+                "# source /etc/environment",
+
+                "#=========== Set the hostname with instance id ===========",
+                "INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id | cut -d '-' -f 2`",
+                "echo $HOSTNAME > /etc/aws_hostname",
+                {"Fn::Join": ["", ["NEW_HOSTNAME=", { "Ref": "Env"}, "-", { "Ref": "ECSClusterName"}, "-$INSTANCE_ID"]]},
+                {"Fn::Join":["", ["sudo sed -i -e \"s/HOSTNAME=.*/HOSTNAME=$NEW_HOSTNAME.localadmin/g\" /etc/sysconfig/network " ]]},
+                {"Fn::Join":["", ["sudo sed -i -e \"s/localhost localhost.localdomain/$NEW_HOSTNAME.localdomain $NEW_HOSTNAME/g\" /etc/hosts " ]]},
+                "sudo reboot",
+
+                "#=========== Install & configure docker ===========",
+                "sudo yum update && sudo yum install -y yum-utils",
+                "sudo yum-config-manager --enable rhui-REGION-rhel-server-extras",
+                "sudo yum install -y docker unzip wget",
+                "# /bin/echo HTTPS_PROXY=http://proxy.kdc.bbs.com:8099 >> /etc/sysconfig/docker",
+                "# /bin/echo HTTP_PROXY=http://proxy.kdc.bbs.com:8099 >> /etc/sysconfig/docker",
+
+                "#=========== Install aws cli tool ===========",
+                "curl \"https://s3.amazonaws.com/aws-cli/awscli-bundle.zip\" -o \"awscli-bundle.zip\" ",
+                "unzip awscli-bundle.zip",
+                "./awscli-bundle/install -i /usr/share/aws -b /usr/bin/aws",
+
+                "#=========== Create a new ECS stack ===========",
+                {"Fn::Join":["",[ "aws ecs create-cluster --region us-west-2 --cluster-name ", {"Ref":"ECSClusterName"} ]]},
+
+                "#======= Allow the port proxy to route traffic using loopback addresses ========",
+                "/bin/echo 'net.ipv4.conf.all.route_localnet = 1' >> /etc/sysctl.conf",
+                "sysctl -p /etc/sysctl.conf",
+                "iptables -t nat -A PREROUTING -p tcp -d 169.254.170.2 --dport 80 -j DNAT --to-destination 127.0.0.1:51679",
+                "iptables -t nat -A OUTPUT -d 169.254.170.2 -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 51679",
+                "sh -c 'iptables-save > /etc/sysconfig/iptables'",
+
+                "#======= Create ECS container agent configuration file ========",
+                "mkdir -p /etc/ecs && sudo touch /etc/ecs/ecs.config",
+                "/bin/echo ECS_DATADIR=/data >> /etc/ecs/ecs.config",
+                "/bin/echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config",
+                "/bin/echo ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true >> /etc/ecs/ecs.config",
+                "/bin/echo ECS_LOGFILE=/log/ecs-agent.log >> /etc/ecs/ecs.config",
+                "/bin/echo ECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\"] >> /etc/ecs/ecs.config",
+                "/bin/echo ECS_LOGLEVEL=info >> /etc/ecs/ecs.config",
+                "# /bin/echo HTTP_PROXY=http://<proxy_host>:<proxy_port> >> /etc/ecs/ecs.config",
+                "# /bin/echo NO_PROXY=169.254.169.254,169.254.170.2 >> /etc/ecs/ecs.config",
+                "/bin/echo /var/run/docker.sock >> /etc/ecs/ecs.config",
+                { "Fn::Join": ["",[ "/bin/echo ECS_CLUSTER=", { "Ref": "ECSClusterName"}, " >> /etc/ecs/ecs.config" ]]},
+
+                "#======= Create directories for ECS ========",
+                "mkdir -p /var/lib/ecs/data/",
+                "mkdir -p /var/log/ecs/",
+
+                "#====== Write ecs-agent service file ======",
+                "sh -c 'cat <<EOF > /etc/systemd/system/ecs-agent.service ",
+                "[Unit] ",
+                "Description=ecs-agent ",
+                "Requires=docker.service ",
+                "After=docker.service ",
+                "[Service] ",
+                "Restart=on-failure ",
+                "TimeoutStartSec=0 ",
+                "ExecStartPre=-/usr/bin/docker kill ecs-agent ",
+                "ExecStartPre=-/usr/bin/docker rm ecs-agent ",
+                {"Fn::Join":["",[ "ExecStartPre=/usr/bin/docker pull ", {"Ref":"ECSAgentImageName"}, " " ]]},
+                "ExecStart=/usr/bin/docker run --name ecs-agent \\",
+                  "--volume=/sys/fs/cgroup:/sys/fs/cgroup:ro \\",
+                  "--volume=/etc/ecs:/etc/ecs \\",
+                  "--volume=/var/log/ecs/:/log:z \\",
+                  "--volume=/var/lib/ecs/data:/data:z \\",
+                  "--volume=/var/run:/var/run \\",
+                  "--volume=/var/run/docker.sock:/var/run/docker.sock \\",
+                  "--volume=/var/run/docker/execdriver/native:/var/lib/docker/execdriver/native:ro \\",
+                  "--publish=127.0.0.1:51678:51678 \\",
+                  "--env=ECS_LOGFILE=/var/log/ecs-agent.log \\",
+                  "--env=ECS_LOGLEVEL=info \\",
+                  "--env=ECS_DATADIR=/data \\",
+                  { "Fn::Join": ["", ["--env=ECS_CLUSTER=", {"Ref" : "ECSClusterName" }, " \\"]]},
+                  "--env=HTTP_PROXY=$HTTP_PROXY \\",
+                  "--env=HTTPS_PROXY=$HTTPS_PROXY \\",
+                  "--env=NO_PROXY=$NO_PROXY \\",
+                  "--env-file=/etc/ecs/ecs.config \\",
+                  "--net=host \\",
+                  "--privileged \\",
+                  {"Ref":"ECSAgentImageName"},
+                "ExecStop=/usr/bin/docker stop ecs-agent ",
+                "[Install] ",
+                "WantedBy=multi-user.target ",
+                "EOF'",
+
+                "#====== define the ecs agent as a daemon ======",
+                "sh -c 'cat <<EOF > /etc/systemd/system/ecs-agent.timer ",
+                "[Unit] ",
+                "[Timer] ",
+                "OnStartupSec=2min ",
+                "[Install] ",
+                "WantedBy=multi-user.target ",
+                "EOF' ",
+
+                "#====== Make instance id and ip accessible for ecs agent and registrator ======",
+                "curl -o /etc/local-ipv4 http://169.254.169.254/latest/meta-data/local-ipv4 ",
+                "chmod a+r /etc/local-ipv4 ",
+                "curl -o /etc/instance-id http://169.254.169.254/latest/meta-data/instance-id ",
+                "chmod a+r /etc/instance-id ",
+
+                "#====== Define the container registrator service ======",
+                "sh -c 'cat <<EOF > /etc/systemd/system/registrator.service ",
+                "[Unit] ",
+                "Description=registrator ",
+                "Requires=consul.service ",
+                "After=consul.service ",
+                "[Service] ",
+                "Restart=on-failure ",
+                "TimeoutStartSec=0 ",
+                "ExecStartPre=-/usr/bin/docker kill registrator ",
+                "ExecStartPre=-/usr/bin/docker rm registrator ",
+                "ExecStartPre=/usr/bin/docker pull dockyardprod.kdc.bbs.com:443/gliderlabs/registrator:latest ",
+                "ExecStart=/usr/bin/docker run --name=registrator \\",
+                  "--volume=/var/run/docker.sock:/tmp/docker.sock \\",
+                  "--net=host \\",
+                  {"Fn::Join":["",[{"Ref":"RegistratorImageName"}, "  \\" ]]},
+                  "consul://`cat /etc/local-ipv4`:8500 ",
+                "ExecStop=/usr/bin/docker stop registrator ",
+                "[Install] ",
+                "WantedBy=multi-user.target ",
+                "EOF' ",
+
+                "#====== Define the registrator timer as a daemon ======",
+                "sh -c 'cat <<EOF > /etc/systemd/system/registrator.timer ",
+                "[Unit] ",
+                "[Timer] ",
+                "OnStartupSec=2min ",
+                "[Install] ",
+                "WantedBy=multi-user.target ",
+                "EOF' ",
+
+                "#====== start the daemons and services defined above ======",
+                "sudo /bin/systemctl enable registrator.service ",
+                "sudo /bin/systemctl start registrator.timer ",
+
+                "semanage permissive -a init_t ",
+                "semanage permissive -a cloud_init_t ",
+
+                "sudo /bin/systemctl --system daemon-reload ",
+                "sudo /bin/systemctl enable lvm2-monitor.service ",
+                "sudo /bin/systemctl enable lvm2-lvmetad.service ",
+                "sudo /bin/systemctl enable docker.service ",
+                "sudo /bin/systemctl enable ecs-agent.service ",
+                "sudo /bin/systemctl start ecs-agent.timer ",
+
+
+              "# End of file #\n"
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+
+
+  "Outputs": {
+    "ECSClusterName": {
+      "Value": { "Ref": "ECSClusterName" },
+      "Description": "Name of the ECS Cluster"
+    }
+  }
+}

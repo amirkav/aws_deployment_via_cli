@@ -1,0 +1,63 @@
+{
+  "family": "ecs-taskfam-seneca-01",
+  "taskRoleArn": "arn:aws:iam::474602133305:role/BBS-Dev-ECS-Member-Role",
+  "networkMode": "host",
+  "memory": "1 GB",
+  "cpu": "1 vCPU",
+  "containerDefinitions": [
+    {
+      "image": "474602133305.dkr.ecr.us-west-2.amazonaws.com/seneca:1.3",
+      "name": "seneca-cont",
+      "portMappings": [
+        {
+          "hostPort": 80,
+          "containerPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "memory": 512,
+      "cpu": 512,
+      "essential": true,
+      "environment": [],
+      "mountPoints": [
+        {
+          "sourceVolume": "AppConfig",
+          "containerPath": "/etc/seneca"
+        },
+        {
+          "sourceVolume": "AppData",
+          "containerPath": "/var/lib/seneca/data"
+        },
+        {
+          "sourceVolume": "AppLog",
+          "containerPath": "/var/log/seneca"
+        }
+      ],
+      "volumesFrom": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "awslogs-seneca",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "seneca-container"
+        }
+      },
+      "privileged": true
+    }
+  ],
+  "placementConstraints": [],
+  "volumes": [
+    {
+      "name": "AppConfig",
+      "host": {"sourcePath": "/etc/seneca"}
+    },
+    {
+      "name": "AppData",
+      "host": {"sourcePath": "/var/lib/seneca/data"}
+    },
+    {
+      "name": "AppLog",
+      "host": {"sourcePath": "/var/log/seneca"}
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+---
+stack_basename: "ecs-stack"
+stack_suffix: "seneca-12"
+ecs_cluster_basename: "ecs-cluster"
+aws_region: "us-west-2"
+template_name: "ecs-cluster-cft-amznlnx.json"
+
+environments:
+  dev:
+    us-west-2:
+      keypair_name: "BBS_KP"
+      instance_type: "t2.xlarge"
+      iam_instance_profile: "BBS-Dev-Developer-Role"
+      ami_id: "ami-eb5fef93"
+
+  qa:
+    us-west-2:
+      keypair_name: "BBS_KP"
+      instance_type: "t2.xlarge"
+      iam_instance_profile: "BBS-Dev-Developer-Role"
+      ami_id: "ami-eb5fef93"
+
+  prod:
+    us-west-2:
+      keypair_name: "BBS_KP"
+      instance_type: "t2.xlarge"
+      iam_instance_profile: "BBS-Dev-Developer-Role"
+      ami_id: "ami-eb5fef93"
