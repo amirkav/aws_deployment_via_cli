@@ -1,0 +1,11 @@
+Listener for HTTP 80 Traffic
+
+Listener Rule 1 - Send to Base Targets:
+Target Group: Base Targets
+Path: `/`
+Priority: `1`
+
+Listener Rule 2 - Send to seneca Targets:
+Target Group: seneca Targets
+Path: `/seneca`
+Priority: `2`

@@ -1,0 +1,255 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Spin up a cluster that runs seneca api behind an ELB. Resources: EC2 Cluster, ASG, Classic ELB.",
+
+  "Parameters": {
+    "BaseName": {
+      "Description": "Base Name of the CloudFormation stack to be provisioned. We will add StackSuffix to this name to indicate app name and version.",
+      "Default": "elb-stack",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "15",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+    "StackSuffix": {
+      "Description": "Suffix for names of stack resources. Should include a unique identifier such as app name or unique ID of the point of contact, and an incremental value to show version and iteration step.",
+      "Default": "seneca-10",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "15",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "can contain only ASCII characters."
+    },
+    "ProjectName": {
+      "Description": "Name of the customer or project. We will use this value to reference other project-specific parameters in config files.",
+      "Default": "thoughtlabs",
+      "Type": "String",
+      "MinLength": "2",
+      "MaxLength": "20",
+      "AllowedPattern": "[\\x20-\\x7E]*",
+      "ConstraintDescription": "Should match a customer project name in config.json file. Can contain only ASCII characters. Min Length 2, Max Length 15"
+    },
+
+    "KeyPairName": {
+      "Description": "Key Pair Name",
+      "Default": "BBS_KP",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "Must be the name of an existing EC2 KeyPair."
+    },
+    "AmiId": {
+      "Description": "We use only ONE AMI_ID in the CFT, so mapping between (dev,qa,prod) and regions is maintained outside",
+      "Default": "ami-eb5fef93",
+      "Type": "String"
+    },
+    "Env": {
+      "Description": "Environment name",
+      "Default": "dev",
+      "Type": "String",
+      "AllowedValues": ["dev", "qa", "perf", "prod"],
+      "ConstraintDescription": "must be a valid environment name"
+    },
+
+    "OwnerContact": {
+      "Description": "Developer email",
+      "Default": "devops@altitudenetworks.com",
+      "Type": "String",
+      "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
+      "ConstraintDescription": "Must be a valid email address."
+    },
+
+    "AsgRole": {
+      "Description": "Role of ASG usually a short word and is used in shell script names",
+      "Type": "String",
+      "Default": "ecsasg"
+    }
+
+  },
+
+  "Mappings": {
+    "dev": {
+      "us-west-2": {
+        "sshKeyPair" : "BBS_KP",
+        "appInstanceType" : "t2.medium",
+        "ASGMinMax" : "3",
+
+        "AppSecurityGroups" : ["sg-2a252856", "sg-ae8f82d2", "sg-35f5f949"],
+        "AppSubnets" : ["subnet-f3e6f595"],
+        "IAMRole" : "BBS-Dev-ECS-Member-Role",
+
+        "ELBScheme" : "internet-facing"
+      }
+    },
+
+    "qa": {
+      "us-west-2": {
+        "sshKeyPair" : "BBS_KP",
+        "appInstanceType" : "t2.medium",
+        "ASGMinMax" : "3",
+
+        "AppSecurityGroups" : ["sg-2a252856", "sg-ae8f82d2", "sg-35f5f949"],
+        "AppSubnets" : ["subnet-f3e6f595"],
+        "IAMRole" : "BBS-Dev-ECS-Member-Role",
+
+        "ELBScheme" : "internal"
+      }
+    },
+
+    "prod": {
+      "us-west-2": {
+        "sshKeyPair" : "BBS_KP",
+        "appInstanceType" : "t2.medium",
+        "ASGMinMax" : "3",
+
+        "AppSecurityGroups" : ["sg-2a252856", "sg-ae8f82d2", "sg-35f5f949"],
+        "AppSubnets" : ["subnet-f3e6f595"],
+        "IAMRole" : "BBS-Dev-ECS-Member-Role",
+
+        "ELBScheme" : "internal"
+      }
+    }
+  },
+
+  "Resources": {
+
+    "AppASG": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "VPCZoneIdentifier": {"Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "AppSubnets"]},
+        "HealthCheckType": "EC2",
+        "HealthCheckGracePeriod": 1200,
+        "LaunchConfigurationName": { "Ref": "AppLaunchConfig" },
+        "DesiredCapacity": { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMinMax"] },
+        "MinSize":  { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMinMax"] },
+        "MaxSize":  { "Fn::FindInMap": [{ "Ref": "Env"}, { "Ref": "AWS::Region" }, "ASGMinMax"] },
+        "LoadBalancerNames" : [ { "Ref" : "AppELB" } ],
+        "Tags": [
+          {
+            "Key": "Name", "Value": { "Fn::Join":[ "-", [ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"StackSuffix"}, "instance" ] ] },
+            "PropagateAtLaunch": "true",
+            "Description": "This name will be assigned to all EC2 instances in this ASG. But, it will not be assigned to the ASG resource itself."
+          },
+          {
+            "Key": "OwnerContact",
+            "Value": { "Ref": "OwnerContact" },
+            "PropagateAtLaunch": "true"
+          }
+        ]
+      },
+      "UpdatePolicy" : {
+        "AutoScalingScheduledAction" : {"IgnoreUnmodifiedGroupSizeProperties" : "true"},
+        "AutoScalingReplacingUpdate" : {"WillReplace" : "false"}
+      }
+    },
+
+    "AppELB" : {
+      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties" : {
+        "ConnectionDrainingPolicy" : { "Enabled" : "true", "Timeout" : 300 },
+        "ConnectionSettings" : { "IdleTimeout": 600 },
+        "CrossZone"	: "true",
+        "HealthCheck" : {
+            "Timeout" : "3",
+            "Target" : "TCP:22",
+            "Interval" : "30",
+            "HealthyThreshold" : "2",
+            "UnhealthyThreshold" : "4"
+        },
+        "Listeners":[
+          { "InstancePort" : "80",
+            "InstanceProtocol" : "HTTP",
+            "LoadBalancerPort" : "80",
+            "Protocol" : "HTTP"
+          },
+          {	"InstancePort" : "80",
+            "InstanceProtocol" : "TCP",
+            "LoadBalancerPort" : "443",
+            "Protocol" : "TCP"
+          },
+          {	"InstancePort" : "22",
+            "InstanceProtocol" : "TCP",
+            "LoadBalancerPort" : "22",
+            "Protocol" : "TCP"
+          }
+        ],
+        "LoadBalancerName" : { "Fn::Join":[ "-", [ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"StackSuffix"}, "ELB" ] ] },
+        "Scheme" : { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "ELBScheme" ] },
+        "SecurityGroups" : { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "AppSecurityGroups" ] },
+        "Subnets" : { "Fn::FindInMap" : [ {"Ref": "Env"}, {"Ref": "AWS::Region"}, "AppSubnets" ] },
+        "Tags" : [
+          {"Key":"Name", "Value" : {"Fn::Join": ["-",[ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"StackSuffix"}, "ELB"]] } },
+          {"Key":"OwnerContact", "Value" : { "Ref": "OwnerContact" } },
+          {"Key":"App Name", "Value" : { "Fn::Join":[ "-", [ {"Ref":"BaseName"}, {"Ref":"Env"}, {"Ref":"StackSuffix"} ] ] } }
+        ]
+      }
+    },
+
+    "AppLaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Metadata": {
+        "AWS::CloudFormation::Authentication": {
+          "S3AccessCreds": {
+            "type": "S3",
+            "roleName": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]}
+          }
+        }
+      },
+      "Properties": {
+        "ImageId": {"Ref": "AmiId"},
+        "KeyName": {"Ref": "KeyPairName"},
+        "InstanceType": {"Fn::FindInMap": [{ "Ref": "Env"}, {"Ref": "AWS::Region"}, "appInstanceType"]},
+        "IamInstanceProfile": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "IAMRole"]},
+        "SecurityGroups": {"Fn::FindInMap": [{"Ref": "Env"}, {"Ref": "AWS::Region"}, "AppSecurityGroups"]},
+        "InstanceMonitoring": "false",
+        "BlockDeviceMappings": [{"DeviceName": "/dev/xvda", "Ebs": {"VolumeSize": "20"}}],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": ["\n",
+              [
+                "#!/usr/bin/env bash",
+                "exec > >(tee /var/log/user-data.log) 2>&1",
+                "set -o errexit -o nounset -o xtrace",
+
+                "#=========== Set env vars ===========",
+                "sudo /bin/echo 'export VENV_DIR=/opt/venv' >> /etc/environment",
+                "sudo /bin/echo 'export DATA_DIR=/opt/data' >> /etc/environment",
+                "sudo /bin/echo 'export GITS_DIR=/opt/gits' >> /etc/environment",
+                "sudo /bin/echo 'export CONF_DIR=/opt/.credentials' >> /etc/environment",
+                "source /etc/environment",
+
+                "#=========== Install packages and dependencies ===========",
+                "sudo yum install -y jq git 2>&1",
+
+                "#=========== Download config files ===========",
+                "sudo rm -rf ${CONF_DIR}",
+                "sudo mkdir ${CONF_DIR}",
+                "sudo aws s3 cp s3://bbs-seneca-conf/config.json ${CONF_DIR}/config.json",
+                "export CUSTOMER_NAME=$(cat ${CONF_DIR}/config.json | jq '.deployment.customer' --raw-output)",
+                "export SERVICE_ACCOUNT_KEY=$(cat ${CONF_DIR}/config.json | jq \".${CUSTOMER_NAME}.service_account_json_file_name\" --raw-output)",
+                "sudo aws s3 cp s3://bbs-seneca-conf/${SERVICE_ACCOUNT_KEY} ${CONF_DIR}/${SERVICE_ACCOUNT_KEY}",
+
+                "#=========== Clone Git Repo ===========", "\n",
+                "sudo aws s3 cp s3://bbs-seneca-conf/clone_git_repos.sh /tmp/clone_git_repos.sh", "\n",
+                "sudo bash /tmp/clone_git_repos.sh", "\n",
+
+                "#=========== Deploy API  ===========",
+                "cd ${GITS_DIR}/aurelius/elb_cluster/deploy_scripts/amznlnx",
+                "bash 00_deploy_all.sh 2>&1",
+
+
+              "# End of file #\n"
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+
+  "Outputs":{
+    "ELBDNSName": {
+      "Value" : {"Fn::GetAtt":["AppELB", "DNSName"]},
+      "Description" : "Elastic Load Balancer DNS Name"
+    }
+  }
+}
